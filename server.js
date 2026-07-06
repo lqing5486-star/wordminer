@@ -252,6 +252,37 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
 
+    if (p === '/api/debug') {
+      const videoId = parsed.query.video || 'hmtuvNfytjM';
+      const clients = ['WEB', 'ANDROID', 'IOS', 'MWEB', 'TV', 'WEB_EMBEDDED', 'TV_EMBEDDED'];
+      const out = {};
+      const yt = await getYT();
+      for (const c of clients) {
+        try {
+          const info = await yt.getInfo(videoId, c);
+          const caps = (info.captions && info.captions.caption_tracks) || [];
+          let dl = null;
+          if (caps.length) {
+            try {
+              const t = caps.find((x) => /en/i.test(x.language_code || '')) || caps[0];
+              const r = await getText(t.base_url + '&fmt=json3');
+              dl = r.length;
+            } catch (e) {
+              dl = 'dlerr:' + e.message;
+            }
+          }
+          out[c] = {
+            play: info.playability_status && info.playability_status.status,
+            caps: caps.length,
+            dlLen: dl,
+          };
+        } catch (e) {
+          out[c] = { err: e.message };
+        }
+      }
+      return sendJson(res, 200, out);
+    }
+
     return serveStatic(req, res);
   } catch (error) {
     console.error(`❌ ${p} 出错: ${error.message}`);
