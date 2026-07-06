@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>影视挖词学英语 · 商业原型演示</title>
+    <style>
+        :root {
+            --bg-color: #111625;
+            --card-bg: #1a2035;
+            --text-main: #ffffff;
+            --text-sub: #7e8b9b;
+            --accent-blue: #4d70ff;
+            --accent-green: #2ecc71;
+            --border-color: #2a3350;
+            --highlight: #f1c40f;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg-color); color: var(--text-main); font-family: -apple-system, sans-serif; padding: 40px 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        h3 { font-size: 16px; color: var(--text-sub); margin-bottom: 12px; font-weight: 500; }
+        input[type="text"], textarea { width: 100%; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main); padding: 14px; border-radius: 8px; font-size: 14px; margin-bottom: 20px; outline: none; }
+        textarea { height: 180px; resize: vertical; font-family: monospace; line-height: 1.6; }
+        .video-placeholder { width: 100%; aspect-ratio: 16 / 9; background-color: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); margin-bottom: 20px; }
+        .btn { background-color: var(--accent-blue); color: white; border: none; padding: 12px 24px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: 500; }
+        .btn-secondary { background-color: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+        .hidden { display: none !important; }
+        .workspace { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; }
+        .word-card { background-color: #222943; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+        .context-text { font-size: 14px; color: var(--text-main); margin-bottom: 12px; line-height: 1.5; }
+        .target-word { color: var(--highlight); font-weight: bold; background-color: rgba(241, 196, 15, 0.15); padding: 2px 6px; border-radius: 4px; }
+        .word-info { display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed var(--border-color); padding-top: 10px; }
+        .word-title { font-size: 16px; font-weight: bold; color: #fff; }
+        .word-mean { font-size: 13px; color: var(--accent-green); background: rgba(46, 204, 113, 0.1); padding: 4px 8px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="step0_view">
+        <div class="card">
+            <h3>YouTube 链接</h3>
+            <input type="text" id="videoUrl" value="https://www.youtube.com/watch?v=hmtuvNfytjM">
+            <div class="video-placeholder"><div id="ytPlayer0" style="width:100%; height:100%;"></div></div>
+            <h3>字幕文本框（抓取成功后，完整的字幕会回吐在这里）</h3>
+            <textarea id="subInput" placeholder="等待抓取中..."></textarea>
+            <div><button class="btn" onclick="handleStartMining()">🔍 开始智能挖词</button></div>
+        </div>
+    </div>
+    <div id="step1_view" class="hidden">
+        <div class="workspace">
+            <div style="position: sticky; top: 20px;">
+                <div class="video-placeholder"><div id="ytPlayer1" style="width:100%; height:100%;"></div></div>
+                <button class="btn btn-secondary" style="width: 100%;" onclick="goBackToStep0()">← 返回重新导入</button>
+            </div>
+            <div>
+                <h3 style="color: #fff; font-size: 18px; margin-bottom: 16px;">🎯 智能提取的高频核心卡片：</h3>
+                <div id="wordCardsContainer"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    var tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api";
+    var firstScriptTag = document.getElementsByTagName('script')[0]; firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    let player0 = null, player1 = null;
+    function onYouTubeIframeAPIReady() {
+        const vid = extractVideoId(document.getElementById('videoUrl').value);
+        player0 = new YT.Player('ytPlayer0', { height: '100%', width: '100%', videoId: vid });
+    }
+    function extractVideoId(url) {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp); return (match && match[2].length === 11) ? match[2] : "hmtuvNfytjM";
+    }
+    document.getElementById('videoUrl').addEventListener('input', function() {
+        const vid = extractVideoId(this.value); if (player0 && player0.loadVideoById) player0.loadVideoById(vid);
+    });
+
+    const smartDict = {
+        "intelligence": "n. 智力，智能；情报", "artificial": "adj. 人工的，人造的", "technology": "n. 技术，科技",
+        "development": "n. 发展，开发", "important": "adj. 重要的", "different": "adj. 不同的",
+        "foundation": "n. 基础，基金会", "generation": "n. 产生，一代", "revolution": "n. 革命",
+        "understand": "v. 理解", "incredible": "adj. 难以置信的", "capability": "n. 能力，性能",
+        "scary": "adj. 可怕的", "future": "n. 未来", "happen": "v. 发生", "thought": "n. 想法，思想"
+    };
+
+    async function handleStartMining() {
+        const videoUrl = document.getElementById('videoUrl').value;
+        const vid = extractVideoId(videoUrl);
+        try {
+            document.getElementById('subInput').value = "正在通过 Node.js 3000端口 抓取原文字幕...";
+            const response = await fetch(`http://127.0.0.1:3000/api/subtitles?video=${vid}`);
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('subInput').value = data.subtitles;
+                renderWordCards(data.subtitles);
+                switchToStep1(vid);
+            } else {
+                alert("后端报错: " + data.error);
+            }
+        } catch (err) {
+            alert("未能连接到本地 3000 端口，请确保跑着 node server.js 的窗口处于开启状态！");
+        }
+    }
+
+    function renderWordCards(text) {
+        const container = document.getElementById('wordCardsContainer');
+        container.innerHTML = '';
+        const lines = text.split('\n');
+        let count = 0;
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim(); if(!line) continue;
+            for (let word in smartDict) {
+                let regex = new RegExp(`\\b${word}\\b`, 'i');
+                if (regex.test(line) && count < 15) {
+                    let highlightedLine = line.replace(regex, `<span class="target-word">${word}</span>`);
+                    container.innerHTML += `<div class="word-card"><div class="context-text">🎬 ... ${highlightedLine} ...</div><div class="word-info"><span class="word-title">${word}</span><span class="word-mean">${smartDict[word]}</span></div></div>`;
+                    count++; break;
+                }
+            }
+        }
+    }
+    function switchToStep1(vid) {
+        document.getElementById('step0_view').classList.add('hidden');
+        document.getElementById('step1_view').classList.remove('hidden');
+        if (!player1) { player1 = new YT.Player('ytPlayer1', { height: '100%', width: '100%', videoId: vid }); } 
+        else { player1.loadVideoById(vid); }
+    }
+    function goBackToStep0() {
+        document.getElementById('step1_view').classList.add('hidden');
+        document.getElementById('step0_view').classList.remove('hidden');
+    }
+</script>
+</body>
+</html>

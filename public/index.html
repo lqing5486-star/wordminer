@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WordMiner · 看视频挖词学英语</title>
+    <meta name="description" content="粘贴 YouTube 链接，一键抓取英文字幕、智能挖出高价值生词、真实中英释义，边看边学。">
+    <style>
+        :root {
+            --bg-color: #0e1320;
+            --card-bg: #1a2035;
+            --card-bg2: #222943;
+            --text-main: #ffffff;
+            --text-sub: #8b97a8;
+            --accent-blue: #4d70ff;
+            --accent-green: #2ecc71;
+            --border-color: #2a3350;
+            --highlight: #f1c40f;
+            --radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg-color); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; padding: 32px 16px 64px; line-height: 1.5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+        header.brand .logo { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--accent-blue), #7a5cff); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+        header.brand h1 { font-size: 24px; font-weight: 700; letter-spacing: .5px; }
+        header.brand h1 span { color: var(--accent-blue); }
+        .tagline { color: var(--text-sub); font-size: 14px; margin-bottom: 24px; }
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 24px; margin-bottom: 24px; }
+        h3 { font-size: 15px; color: var(--text-sub); margin-bottom: 10px; font-weight: 500; }
+        input[type="text"], textarea { width: 100%; background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main); padding: 14px; border-radius: 8px; font-size: 14px; margin-bottom: 18px; outline: none; }
+        input[type="text"]:focus, textarea:focus { border-color: var(--accent-blue); }
+        textarea { height: 150px; resize: vertical; font-family: ui-monospace, monospace; line-height: 1.6; }
+        .video-placeholder { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); margin-bottom: 18px; }
+        .btn { background: var(--accent-blue); color: #fff; border: none; padding: 13px 26px; font-size: 15px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: opacity .2s, transform .1s; }
+        .btn:hover { opacity: .9; }
+        .btn:active { transform: translateY(1px); }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-secondary { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+        .hidden { display: none !important; }
+        .workspace { display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: start; }
+        @media (max-width: 860px) { .workspace { grid-template-columns: 1fr; } body { padding: 20px 12px 48px; } }
+        .sticky { position: sticky; top: 16px; }
+        .word-card { background: var(--card-bg2); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+        .context-text { font-size: 14px; color: #d7deea; margin-bottom: 12px; line-height: 1.6; }
+        .target-word { color: var(--highlight); font-weight: 700; background: rgba(241, 196, 15, 0.15); padding: 2px 6px; border-radius: 4px; }
+        .word-head { display: flex; align-items: baseline; gap: 10px; border-top: 1px dashed var(--border-color); padding-top: 12px; flex-wrap: wrap; }
+        .word-title { font-size: 18px; font-weight: 700; color: #fff; }
+        .word-phonetic { font-size: 13px; color: var(--text-sub); font-family: ui-monospace, monospace; }
+        .word-zh { font-size: 14px; color: var(--accent-green); background: rgba(46, 204, 113, 0.1); padding: 3px 8px; border-radius: 4px; margin-left: auto; }
+        .word-defs { margin-top: 8px; font-size: 13px; color: var(--text-sub); }
+        .word-defs .pos { color: var(--accent-blue); font-style: italic; margin-right: 6px; }
+        .loading-inline { color: var(--text-sub); font-size: 13px; }
+        .status-bar { font-size: 13px; color: var(--text-sub); margin: 10px 0 0; min-height: 18px; }
+        .status-bar.err { color: #ff6b6b; }
+        .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-color); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .count-badge { background: rgba(77,112,255,.15); color: var(--accent-blue); font-size: 12px; padding: 3px 10px; border-radius: 20px; }
+        footer { text-align: center; color: var(--text-sub); font-size: 12px; margin-top: 40px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="brand">
+        <div class="logo">⛏️</div>
+        <h1>Word<span>Miner</span></h1>
+    </header>
+    <p class="tagline">粘贴 YouTube 链接 → 一键抓英文字幕 → 智能挖出高价值生词，真实中英释义，边看边学。</p>
+
+    <!-- Step 0 -->
+    <div id="step0_view">
+        <div class="card">
+            <h3>YouTube 链接</h3>
+            <input type="text" id="videoUrl" value="https://www.youtube.com/watch?v=hmtuvNfytjM" placeholder="粘贴任意带英文字幕的 YouTube 视频链接">
+            <div class="video-placeholder"><div id="ytPlayer0" style="width:100%; height:100%;"></div></div>
+            <div class="toolbar">
+                <button class="btn" id="mineBtn" onclick="handleStartMining()">🔍 开始智能挖词</button>
+            </div>
+            <div class="status-bar" id="status0"></div>
+        </div>
+    </div>
+
+    <!-- Step 1 -->
+    <div id="step1_view" class="hidden">
+        <div class="workspace">
+            <div class="sticky">
+                <div class="video-placeholder"><div id="ytPlayer1" style="width:100%; height:100%;"></div></div>
+                <button class="btn btn-secondary" style="width: 100%; margin-bottom:16px;" onclick="goBackToStep0()">← 返回重新导入</button>
+                <h3>完整字幕原文</h3>
+                <textarea id="subInput" readonly></textarea>
+            </div>
+            <div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+                    <h3 style="color:#fff; font-size:18px; margin:0;">🎯 智能挖出的核心生词</h3>
+                    <span class="count-badge" id="wordCount"></span>
+                </div>
+                <div id="wordCardsContainer"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer>WordMiner · 看视频学英语 · 字幕来自 YouTube，释义来自公开词典/翻译服务</footer>
+
+<script>
+    // ---------- YouTube 播放器 ----------
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.getElementsByTagName('script')[0].parentNode.insertBefore(tag, document.getElementsByTagName('script')[0]);
+    let player0 = null, player1 = null;
+    function onYouTubeIframeAPIReady() {
+        const vid = extractVideoId(document.getElementById('videoUrl').value);
+        player0 = new YT.Player('ytPlayer0', { height: '100%', width: '100%', videoId: vid });
+    }
+    function extractVideoId(u) {
+        const m = u.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+        return (m && m[2].length === 11) ? m[2] : (u.trim().length === 11 ? u.trim() : "hmtuvNfytjM");
+    }
+    document.getElementById('videoUrl').addEventListener('input', function() {
+        const vid = extractVideoId(this.value);
+        if (player0 && player0.loadVideoById) player0.loadVideoById(vid);
+    });
+
+    // ---------- 停用词表（挖词时过滤掉这些高频低价值词）----------
+    const STOP = new Set(("a about above after again against all am an and any are aren't as at be because been before being below between both but by can can't cannot could couldn't did didn't do does doesn't doing don't down during each few for from further had hadn't has hasn't have haven't having he he'd he'll he's her here here's hers herself him himself his how how's i i'd i'll i'm i've if in into is isn't it it's its itself let's me more most mustn't my myself no nor not of off on once only or other ought our ours ourselves out over own same shan't she she'd she'll she's should shouldn't so some such than that that's the their theirs them themselves then there there's these they they'd they'll they're they've this those through to too under until up very was wasn't we we'd we'll we're we've were weren't what what's when when's where where's which while who who's whom why why's with won't would wouldn't you you'd you'll you're you've your yours yourself yourselves just get got go going gonna wanna like really know think say said one two get make made will now well yeah okay right come came take took see saw want need thing things people time way lot much many good great big small new old day today back give given even still also because though although upon into onto than then them us our your their its whats gotta kinda sorta").split(/\s+/));
+
+    // ---------- 从字幕挖候选生词 ----------
+    function mineWords(text, maxN = 18) {
+        const lines = text.split('\n');
+        const freq = {};      // word -> count
+        const firstCtx = {};  // word -> 第一次出现的整行
+        for (const raw of lines) {
+            const line = raw.trim();
+            if (!line) continue;
+            const tokens = line.toLowerCase().match(/[a-z][a-z'-]{2,}/g) || [];
+            const seenInLine = new Set();
+            for (let w of tokens) {
+                w = w.replace(/^[-']+|[-']+$/g, '');
+                if (w.length < 4) continue;
+                if (STOP.has(w)) continue;
+                freq[w] = (freq[w] || 0) + 1;
+                if (!firstCtx[w]) firstCtx[w] = line;
+                seenInLine.add(w);
+            }
+        }
+        // 打分：长度加权 + 词频（偏向较长、非最高频的实词）
+        const scored = Object.keys(freq).map(w => ({
+            word: w,
+            score: w.length * 1.5 + Math.min(freq[w], 4),
+            ctx: firstCtx[w],
+        }));
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, maxN);
+    }
+
+    // ---------- 并发限制器 ----------
+    async function pool(items, worker, limit = 4) {
+        const ret = [];
+        let i = 0;
+        async function run() {
+            while (i < items.length) {
+                const idx = i++;
+                ret[idx] = await worker(items[idx], idx);
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+        return ret;
+    }
+
+    function setStatus(id, html, isErr = false) {
+        const el = document.getElementById(id);
+        el.innerHTML = html;
+        el.className = 'status-bar' + (isErr ? ' err' : '');
+    }
+
+    // ---------- 主流程 ----------
+    async function handleStartMining() {
+        const btn = document.getElementById('mineBtn');
+        const vid = extractVideoId(document.getElementById('videoUrl').value);
+        btn.disabled = true;
+        setStatus('status0', '<span class="spinner"></span> 正在抓取字幕…（首次唤醒服务器可能要 20~30 秒）');
+        try {
+            const resp = await fetch(`/api/subtitles?video=${vid}`);
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.error || '抓取失败');
+
+            document.getElementById('subInput').value = data.subtitles;
+            const words = mineWords(data.subtitles);
+            switchToStep1(vid);
+            renderWordCards(words);
+            setStatus('status0', '');
+        } catch (err) {
+            setStatus('status0', '❌ ' + err.message, true);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function renderWordCards(words) {
+        const container = document.getElementById('wordCardsContainer');
+        document.getElementById('wordCount').textContent = words.length + ' 词';
+        container.innerHTML = '';
+        words.forEach((item, idx) => {
+            const ctxHtml = item.ctx.replace(
+                new RegExp(`\\b(${item.word})\\b`, 'i'),
+                '<span class="target-word">$1</span>'
+            );
+            const card = document.createElement('div');
+            card.className = 'word-card';
+            card.id = 'wcard-' + idx;
+            card.innerHTML = `
+                <div class="context-text">🎬 … ${ctxHtml} …</div>
+                <div class="word-head">
+                    <span class="word-title">${item.word}</span>
+                    <span class="word-phonetic" id="ph-${idx}"></span>
+                    <span class="word-zh" id="zh-${idx}"><span class="loading-inline">查词中…</span></span>
+                </div>
+                <div class="word-defs" id="def-${idx}"></div>`;
+            container.appendChild(card);
+        });
+
+        // 并发拉取真实释义
+        pool(words, async (item, idx) => {
+            try {
+                const r = await fetch(`/api/lookup?word=${encodeURIComponent(item.word)}`);
+                const d = await r.json();
+                document.getElementById('zh-' + idx).textContent = d.zh || '（无翻译）';
+                document.getElementById('ph-' + idx).textContent = d.phonetic || '';
+                const defEl = document.getElementById('def-' + idx);
+                if (d.meanings && d.meanings.length) {
+                    defEl.innerHTML = d.meanings
+                        .map(m => `<div><span class="pos">${m.pos || ''}</span>${m.def || ''}</div>`)
+                        .join('');
+                }
+            } catch (e) {
+                document.getElementById('zh-' + idx).textContent = '查词失败';
+            }
+        }, 4);
+    }
+
+    function switchToStep1(vid) {
+        document.getElementById('step0_view').classList.add('hidden');
+        document.getElementById('step1_view').classList.remove('hidden');
+        if (!player1) {
+            player1 = new YT.Player('ytPlayer1', { height: '100%', width: '100%', videoId: vid });
+        } else {
+            player1.loadVideoById(vid);
+        }
+    }
+    function goBackToStep0() {
+        document.getElementById('step1_view').classList.add('hidden');
+        document.getElementById('step0_view').classList.remove('hidden');
+    }
+</script>
+</body>
+</html>

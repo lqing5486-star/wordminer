@@ -1,0 +1,14 @@
+# Render Blueprint —— 一键部署 WordMiner
+# 在 Render 控制台 New > Blueprint，选中本仓库即可自动读取此文件
+services:
+  - type: web
+    name: wordminer
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # 部署在海外机房，直连 YouTube，无需代理；如需代理再设 PROXY_URL

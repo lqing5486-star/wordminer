@@ -1,0 +1,15 @@
+{
+  "name": "wordminer",
+  "version": "1.0.0",
+  "description": "WordMiner · 看视频挖词学英语 —— 抓取 YouTube 英文字幕，智能挖词 + 真实中英释义",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "https-proxy-agent": "^7.0.4"
+  }
+}
