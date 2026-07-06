@@ -21,7 +21,10 @@ const PORT = process.env.PORT || 3000;
 let ytPromise = null;
 function getYT() {
   if (!ytPromise) {
-    ytPromise = Innertube.create({ generate_session_locally: true }).catch((e) => {
+    const opts = process.env.YT_COOKIE
+      ? { cookie: process.env.YT_COOKIE }
+      : { generate_session_locally: true };
+    ytPromise = Innertube.create(opts).catch((e) => {
       ytPromise = null; // 允许下次重试
       throw e;
     });
