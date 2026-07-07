@@ -265,12 +265,22 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/debug') {
       const videoId = parsed.query.video || 'hmtuvNfytjM';
-      const clients = ['WEB', 'ANDROID', 'IOS', 'MWEB', 'TV', 'WEB_EMBEDDED', 'TV_EMBEDDED'];
-      const out = {};
-      const yt = await getYT();
-      for (const c of clients) {
+      const { Innertube } = require('youtubei.js');
+      const cookie = process.env.YT_COOKIE
+        ? process.env.YT_COOKIE.replace(/\s+/g, ' ').trim()
+        : '';
+      const modes = {
+        cookieOnly: cookie ? { cookie } : null,
+        cookiePlusLocal: cookie ? { cookie, generate_session_locally: true } : null,
+        localOnly: { generate_session_locally: true },
+        plain: {},
+      };
+      const out = { hasCookie: !!cookie, cookieLen: cookie.length };
+      for (const [name, opts] of Object.entries(modes)) {
+        if (!opts) { out[name] = 'skip(no cookie)'; continue; }
         try {
-          const info = await yt.getInfo(videoId, c);
+          const yt = await Innertube.create(opts);
+          const info = await yt.getInfo(videoId);
           const caps = (info.captions && info.captions.caption_tracks) || [];
           let dl = null;
           if (caps.length) {
@@ -282,13 +292,13 @@ const server = http.createServer(async (req, res) => {
               dl = 'dlerr:' + e.message;
             }
           }
-          out[c] = {
+          out[name] = {
             play: info.playability_status && info.playability_status.status,
             caps: caps.length,
             dlLen: dl,
           };
         } catch (e) {
-          out[c] = { err: e.message };
+          out[name] = { err: e.message };
         }
       }
       return sendJson(res, 200, out);
