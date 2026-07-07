@@ -21,8 +21,11 @@ const PORT = process.env.PORT || 3000;
 let ytPromise = null;
 function getYT() {
   if (!ytPromise) {
+    // 必须同时开本地会话(generate_session_locally)：
+    //  - cookie 负责登录，绕过云机房 IP 的 LOGIN_REQUIRED
+    //  - 本地会话负责生成 POT token，否则 caption base_url 下载回来是空的
     const opts = process.env.YT_COOKIE
-      ? { cookie: process.env.YT_COOKIE }
+      ? { cookie: process.env.YT_COOKIE, generate_session_locally: true }
       : { generate_session_locally: true };
     ytPromise = Innertube.create(opts).catch((e) => {
       ytPromise = null; // 允许下次重试
