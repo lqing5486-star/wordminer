@@ -265,41 +265,44 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/debug') {
       const videoId = parsed.query.video || 'hmtuvNfytjM';
+      const mode = parsed.query.mode || 'cookieOnly';
       const { Innertube } = require('youtubei.js');
       const cookie = process.env.YT_COOKIE
         ? process.env.YT_COOKIE.replace(/\s+/g, ' ').trim()
         : '';
-      const modes = {
+      const modeOpts = {
         cookieOnly: cookie ? { cookie } : null,
         cookiePlusLocal: cookie ? { cookie, generate_session_locally: true } : null,
         localOnly: { generate_session_locally: true },
         plain: {},
       };
-      const out = { hasCookie: !!cookie, cookieLen: cookie.length };
-      for (const [name, opts] of Object.entries(modes)) {
-        if (!opts) { out[name] = 'skip(no cookie)'; continue; }
-        try {
-          const yt = await Innertube.create(opts);
-          const info = await yt.getInfo(videoId);
-          const caps = (info.captions && info.captions.caption_tracks) || [];
-          let dl = null;
-          if (caps.length) {
-            try {
-              const t = caps.find((x) => /en/i.test(x.language_code || '')) || caps[0];
-              const r = await getText(t.base_url + '&fmt=json3');
-              dl = r.length;
-            } catch (e) {
-              dl = 'dlerr:' + e.message;
-            }
+      const opts = modeOpts[mode];
+      if (opts === undefined) {
+        return sendJson(res, 400, { error: 'bad mode', valid: Object.keys(modeOpts) });
+      }
+      if (opts === null) {
+        return sendJson(res, 200, { mode, note: 'no cookie set', hasCookie: false });
+      }
+      const out = { mode, hasCookie: !!cookie, cookieLen: cookie.length };
+      try {
+        const yt = await Innertube.create(opts);
+        const info = await yt.getInfo(videoId);
+        const caps = (info.captions && info.captions.caption_tracks) || [];
+        let dl = null;
+        if (caps.length) {
+          try {
+            const t = caps.find((x) => /en/i.test(x.language_code || '')) || caps[0];
+            const r = await getText(t.base_url + '&fmt=json3');
+            dl = r.length;
+          } catch (e) {
+            dl = 'dlerr:' + e.message;
           }
-          out[name] = {
-            play: info.playability_status && info.playability_status.status,
-            caps: caps.length,
-            dlLen: dl,
-          };
-        } catch (e) {
-          out[name] = { err: e.message };
         }
+        out.play = info.playability_status && info.playability_status.status;
+        out.caps = caps.length;
+        out.dlLen = dl;
+      } catch (e) {
+        out.err = e.message;
       }
       return sendJson(res, 200, out);
     }
