@@ -54,7 +54,88 @@ async function getText(targetUrl, headers = {}) {
 }
 
 // ---------- 抓取字幕 ----------
+// 优先用 Supadata 托管 API（Render 机房 IP 抓不到 YouTube，Supadata 帮我们抓）。
+// 没配 SUPADATA_API_KEY 时（比如本地住宅 IP），回退到 youtubei.js。
 async function fetchSubtitles(videoId) {
+  if (process.env.SUPADATA_API_KEY) {
+    try {
+      return await fetchSubtitlesViaSupadata(videoId);
+    } catch (e) {
+      console.warn(`⚠️ Supadata 抓取失败(${e.message})，尝试回退 youtubei.js`);
+      // 有 key 但失败：若是"无字幕"这类明确错误直接抛，否则回退
+      if (e.code === 'NO_CAPTIONS') throw e;
+    }
+  }
+  return await fetchSubtitlesViaYoutubei(videoId);
+}
+
+// ---------- 方案 B：Supadata 托管字幕 API ----------
+async function supadataGet(pathAndQuery) {
+  const r = await fetch(`https://api.supadata.ai/v1${pathAndQuery}`, {
+    headers: { 'x-api-key': process.env.SUPADATA_API_KEY },
+  });
+  const text = await r.text();
+  let data = {};
+  try { data = JSON.parse(text); } catch (e) {}
+  return { status: r.status, data };
+}
+
+async function fetchSubtitlesViaSupadata(videoId) {
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  // mode=native：只取已有字幕，1 credit/次（不触发 AI 生成，省额度）
+  let { status, data } = await supadataGet(
+    `/transcript?url=${encodeURIComponent(videoUrl)}&lang=en&mode=native`
+  );
+
+  // 长视频(>20min)返回 202 + jobId，轮询取结果
+  if (status === 202 && data.jobId) {
+    const jobId = data.jobId;
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const poll = await supadataGet(`/transcript/${jobId}`);
+      const st = poll.data.status;
+      if (st === 'completed' || poll.data.content) { data = poll.data; status = 200; break; }
+      if (st === 'failed') throw new Error('Supadata 任务失败');
+    }
+  }
+
+  if (status === 401 || status === 403) {
+    throw new Error('Supadata API key 无效或未授权');
+  }
+  if (status !== 200) {
+    const msg = (data && (data.message || data.error)) || `HTTP ${status}`;
+    const err = new Error('Supadata: ' + msg);
+    if (/no transcript|not found|no caption/i.test(msg)) err.code = 'NO_CAPTIONS';
+    throw err;
+  }
+
+  const content = data.content;
+  let segments = [];
+  if (Array.isArray(content)) {
+    segments = content
+      .map((c) => ({ start: (c.offset || 0) / 1000, text: (c.text || '').replace(/\s+/g, ' ').trim() }))
+      .filter((s) => s.text);
+  } else if (typeof content === 'string' && content.trim()) {
+    segments = content.split(/\r?\n/).map((t) => ({ start: 0, text: t.trim() })).filter((s) => s.text);
+  }
+
+  if (segments.length === 0) {
+    const err = new Error('该视频没有可用字幕（或未开启字幕）。换一个带 CC 字幕的视频试试。');
+    err.code = 'NO_CAPTIONS';
+    throw err;
+  }
+
+  return {
+    videoId,
+    language: data.lang || 'en',
+    subtitles: segments.map((s) => s.text).join('\n'),
+    segments,
+    source: 'supadata',
+  };
+}
+
+// ---------- 回退：youtubei.js（本地住宅 IP 可用）----------
+async function fetchSubtitlesViaYoutubei(videoId) {
   const yt = await getYT();
   const info = await yt.getInfo(videoId);
 
@@ -111,6 +192,7 @@ async function fetchSubtitles(videoId) {
     language: track.language_code || 'en',
     subtitles: segments.map((s) => s.text).join('\n'),
     segments,
+    source: 'youtubei',
   };
 }
 
