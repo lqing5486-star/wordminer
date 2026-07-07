@@ -21,11 +21,16 @@ const PORT = process.env.PORT || 3000;
 let ytPromise = null;
 function getYT() {
   if (!ytPromise) {
+    // 清洗 cookie：从浏览器复制常带换行/缩进空格，会导致 "invalid header value"。
+    // cookie 各项本身不含空白，安全地把所有空白折叠成单空格。
+    const cookie = process.env.YT_COOKIE
+      ? process.env.YT_COOKIE.replace(/\s+/g, ' ').trim()
+      : '';
     // 必须同时开本地会话(generate_session_locally)：
     //  - cookie 负责登录，绕过云机房 IP 的 LOGIN_REQUIRED
     //  - 本地会话负责生成 POT token，否则 caption base_url 下载回来是空的
-    const opts = process.env.YT_COOKIE
-      ? { cookie: process.env.YT_COOKIE, generate_session_locally: true }
+    const opts = cookie
+      ? { cookie, generate_session_locally: true }
       : { generate_session_locally: true };
     ytPromise = Innertube.create(opts).catch((e) => {
       ytPromise = null; // 允许下次重试
