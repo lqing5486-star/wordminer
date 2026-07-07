@@ -76,8 +76,26 @@
             <div class="video-placeholder"><div id="ytPlayer0" style="width:100%; height:100%;"></div></div>
             <div class="toolbar">
                 <button class="btn" id="mineBtn" onclick="handleStartMining()">🔍 开始智能挖词</button>
+                <button class="btn btn-secondary" type="button" onclick="toggleHelperSettings()">⚙️ 字幕服务设置</button>
+                <span class="count-badge" id="helperStatus">检测中…</span>
             </div>
             <div class="status-bar" id="status0"></div>
+
+            <!-- 本机字幕 helper 设置 -->
+            <div id="helperSettings" class="hidden" style="margin-top:16px; padding-top:16px; border-top:1px dashed var(--border-color);">
+                <h3>本机字幕服务地址（helper）</h3>
+                <p style="color:var(--text-sub); font-size:13px; margin-bottom:12px; line-height:1.7;">
+                    YouTube 封锁了云服务器 IP，抓字幕必须在你本机进行。<br>
+                    ① 双击项目里的 <b>start-helper.bat</b> 启动本机字幕服务（保持窗口开着）<br>
+                    ② 保持你的代理开着（本机需能访问 YouTube）<br>
+                    ③ 用 <b>Chrome 或 Firefox</b> 打开本页（Safari 不允许网页访问本机服务）
+                </p>
+                <input type="text" id="helperBaseInput" placeholder="http://127.0.0.1:3000">
+                <div class="toolbar">
+                    <button class="btn btn-secondary" type="button" onclick="saveHelperBase()">保存</button>
+                    <button class="btn btn-secondary" type="button" onclick="checkHelper(true)">测试连接</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -174,14 +192,76 @@
         el.className = 'status-bar' + (isErr ? ' err' : '');
     }
 
+    // ---------- 本机字幕 helper 地址解析 ----------
+    // YouTube 封云 IP，抓字幕必须走本机 helper；查词/翻译仍走当前站点(Render)。
+    const DEFAULT_HELPER = 'http://127.0.0.1:3000';
+    function isLocalHost() {
+        return location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    }
+    function helperBase() {
+        const saved = (localStorage.getItem('helperBase') || '').trim();
+        if (saved) return saved.replace(/\/+$/, '');
+        // 页面本身就在本机运行时，直接同源
+        if (isLocalHost()) return '';
+        return DEFAULT_HELPER;
+    }
+    function toggleHelperSettings() {
+        const box = document.getElementById('helperSettings');
+        box.classList.toggle('hidden');
+        if (!box.classList.contains('hidden')) {
+            document.getElementById('helperBaseInput').value =
+                localStorage.getItem('helperBase') || (isLocalHost() ? '' : DEFAULT_HELPER);
+        }
+    }
+    function saveHelperBase() {
+        const v = document.getElementById('helperBaseInput').value.trim();
+        if (v) localStorage.setItem('helperBase', v.replace(/\/+$/, ''));
+        else localStorage.removeItem('helperBase');
+        checkHelper(true);
+    }
+    // 检测 helper 是否在线（调 /health）
+    async function checkHelper(verbose = false) {
+        const badge = document.getElementById('helperStatus');
+        const base = helperBase();
+        try {
+            const r = await fetch(`${base}/health`, { cache: 'no-store' });
+            if (!r.ok) throw new Error('bad');
+            badge.textContent = '🟢 字幕服务在线';
+            badge.style.color = 'var(--accent-green)';
+            if (verbose) setStatus('status0', '✅ 已连上本机字幕服务：' + (base || location.origin));
+            return true;
+        } catch (e) {
+            badge.textContent = '🔴 字幕服务未启动';
+            badge.style.color = '#ff6b6b';
+            if (verbose) showHelperHelp();
+            return false;
+        }
+    }
+    function showHelperHelp() {
+        setStatus('status0',
+            '❌ 连不上本机字幕服务（' + helperBase() + '）。<br>' +
+            '请：① 双击项目里的 <b>start-helper.bat</b> 启动它；② 开着代理；③ 用 Chrome/Firefox 打开本页。<br>' +
+            '（如端口不是 3000，可在“⚙️ 字幕服务设置”里改地址）',
+            true);
+    }
+
     // ---------- 主流程 ----------
     async function handleStartMining() {
         const btn = document.getElementById('mineBtn');
         const vid = extractVideoId(document.getElementById('videoUrl').value);
         btn.disabled = true;
-        setStatus('status0', '<span class="spinner"></span> 正在抓取字幕…（首次唤醒服务器可能要 20~30 秒）');
+        setStatus('status0', '<span class="spinner"></span> 正在通过本机服务抓取字幕…');
         try {
-            const resp = await fetch(`/api/subtitles?video=${vid}`);
+            let resp;
+            try {
+                resp = await fetch(`${helperBase()}/api/subtitles?video=${vid}`);
+            } catch (netErr) {
+                // 网络层失败 = helper 没开 / 端口不对 / 浏览器拦截
+                showHelperHelp();
+                checkHelper(false);
+                btn.disabled = false;
+                return;
+            }
             const data = await resp.json();
             if (!data.success) throw new Error(data.error || '抓取失败');
 
@@ -252,6 +332,10 @@
         document.getElementById('step1_view').classList.add('hidden');
         document.getElementById('step0_view').classList.remove('hidden');
     }
+
+    // 页面加载后自动检测本机字幕服务是否在线
+    checkHelper(false);
+
 </script>
 </body>
 </html>

@@ -263,50 +263,6 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
 
-    if (p === '/api/debug') {
-      const videoId = parsed.query.video || 'hmtuvNfytjM';
-      const mode = parsed.query.mode || 'cookieOnly';
-      const { Innertube } = require('youtubei.js');
-      const cookie = process.env.YT_COOKIE
-        ? process.env.YT_COOKIE.replace(/\s+/g, ' ').trim()
-        : '';
-      const modeOpts = {
-        cookieOnly: cookie ? { cookie } : null,
-        cookiePlusLocal: cookie ? { cookie, generate_session_locally: true } : null,
-        localOnly: { generate_session_locally: true },
-        plain: {},
-      };
-      const opts = modeOpts[mode];
-      if (opts === undefined) {
-        return sendJson(res, 400, { error: 'bad mode', valid: Object.keys(modeOpts) });
-      }
-      if (opts === null) {
-        return sendJson(res, 200, { mode, note: 'no cookie set', hasCookie: false });
-      }
-      const out = { mode, hasCookie: !!cookie, cookieLen: cookie.length };
-      try {
-        const yt = await Innertube.create(opts);
-        const info = await yt.getInfo(videoId);
-        const caps = (info.captions && info.captions.caption_tracks) || [];
-        let dl = null;
-        if (caps.length) {
-          try {
-            const t = caps.find((x) => /en/i.test(x.language_code || '')) || caps[0];
-            const r = await getText(t.base_url + '&fmt=json3');
-            dl = r.length;
-          } catch (e) {
-            dl = 'dlerr:' + e.message;
-          }
-        }
-        out.play = info.playability_status && info.playability_status.status;
-        out.caps = caps.length;
-        out.dlLen = dl;
-      } catch (e) {
-        out.err = e.message;
-      }
-      return sendJson(res, 200, out);
-    }
-
     return serveStatic(req, res);
   } catch (error) {
     console.error(`❌ ${p} 出错: ${error.message}`);
